@@ -1,0 +1,52 @@
+name: Build
+
+on: [push]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    env:
+      ARDUINO_CLI_DIR: ${{github.workspace}}/arduino_cli
+      ARDUINO_CLI_CONFIG_DIR: ${{github.workspace}}/arduino_cli_config
+      ARDUINO_USER_DIR: ${{github.workspace}}/arduino_user
+
+    steps:
+      - name: Download arduino cli
+        run: curl -L -o arduino-cli.tar.gz https://github.com/arduino/arduino-cli/releases/download/v1.2.0/arduino-cli_1.2.0_Linux_64bit.tar.gz
+
+      - name: Install arduino cli
+        run: |
+          mkdir -p ${ARDUINO_CLI_DIR}
+          tar -zxvf arduino-cli.tar.gz -C ${ARDUINO_CLI_DIR}
+
+      - name: Test arduino cli
+        run: ${ARDUINO_CLI_DIR}/arduino-cli -v
+
+      - name: Setup arduino-cli
+        run: |
+          ${ARDUINO_CLI_DIR}/arduino-cli --config-dir ${ARDUINO_CLI_CONFIG_DIR} config init
+          ${ARDUINO_CLI_DIR}/arduino-cli --config-dir ${ARDUINO_CLI_CONFIG_DIR} config set directories.user ${ARDUINO_USER_DIR}
+          ${ARDUINO_CLI_DIR}/arduino-cli --config-dir ${ARDUINO_CLI_CONFIG_DIR} config set library.enable_unsafe_install true
+          ${ARDUINO_CLI_DIR}/arduino-cli --config-dir ${ARDUINO_CLI_CONFIG_DIR} config dump
+          ${ARDUINO_CLI_DIR}/arduino-cli --config-dir ${ARDUINO_CLI_CONFIG_DIR} core install esp32:esp32@3.2.0
+
+      - name: Install lib Adafruit ST7735 and ST7789 Library
+        run: |
+          ${ARDUINO_CLI_DIR}/arduino-cli --config-dir ${ARDUINO_CLI_CONFIG_DIR} lib install "Adafruit ST7735 and ST7789 Library"
+
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          path: ai_vox_spaker_board_test
+
+      - name: Compile
+        run: |
+          ${ARDUINO_CLI_DIR}/arduino-cli --config-dir ${ARDUINO_CLI_CONFIG_DIR} compile -b esp32:esp32:esp32s3 ./ai_vox_spaker_board_test --board-options PartitionScheme=huge_app --log --clean -v --build-path ./build
+
+      - name: Merge Bin
+        run: |
+          ls ${ARDUINO_CLI_CONFIG_DIR}
+          ${ARDUINO_CLI_CONFIG_DIR}/packages/esp32/tools/esptool_py/4.9.dev3/esptool --chip esp32s3 merge_bin -o ai_vox_spaker_board_test.bin --flash_mode keep --flash_freq keep --flash_size keep 0x0 build/ai_vox_spaker_board_test.ino.bootloader.bin 0x8000 build/ai_vox_spaker_board_test.ino.partitions.bin 0xe000 ${ARDUINO_CLI_CONFIG_DIR}/packages/esp32/hardware/esp32/3.2.0/tools/partitions/boot_app0.bin 0x10000 build/ai_vox_spaker_board_test.ino.bin

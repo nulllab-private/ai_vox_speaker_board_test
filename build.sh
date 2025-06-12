@@ -1,0 +1,1 @@
+arduino-cli compile -b esp32:esp32:esp32s3 . -v --build-path ./build
