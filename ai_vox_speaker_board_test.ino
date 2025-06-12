@@ -1,4 +1,6 @@
 #include <Adafruit_ST7789.h>  // Hardware-specific library for ST7789
+#include <FS.h>
+#include <SD.h>
 #include <SPI.h>
 #include <WiFi.h>
 #include <driver/gpio.h>
@@ -13,8 +15,6 @@
 #include <thread>
 #include <vector>
 
-#include "FS.h"
-#include "SD.h"
 #include "button_gpio.h"
 #include "clogger.h"
 #include "es8311.h"
