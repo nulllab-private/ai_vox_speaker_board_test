@@ -29,7 +29,7 @@
 namespace {
 #include "pcm.h"
 
-constexpr char kVersion[] = "1.0.0";
+constexpr char kVersion[] = "1.0.1";
 constexpr char kWifiSsid[] = "emakefun";      // Change this to your WiFi SSID
 constexpr char kWifiPassword[] = "501416wf";  // Change this to your WiFi password
 
