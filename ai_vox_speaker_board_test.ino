@@ -76,6 +76,8 @@ SPIClass g_hspi(HSPI);
 Adafruit_ST7789 g_display(&g_fspi, kDisplayCs, kDisplayDc, -1);
 sdcard_type_t g_sdcard_type = CARD_NONE;
 
+led_strip_handle_t g_led_strip;
+
 void InitEs8311I2s() {
   CLOGI();
 
@@ -143,7 +145,7 @@ void InitEs8311() {
   };
 
   ESP_ERROR_CHECK(i2c_new_master_bus(&i2c_master_bus_config, &g_i2c_master_bus));
-  printf("g_i2c_master_bus:%p\n", g_i2c_master_bus);
+  CLOGI("g_i2c_master_bus:%p", g_i2c_master_bus);
 
   es8311_handle_t es_handle = es8311_create(g_i2c_master_bus, ES8311_ADDRRES_0);
   const es8311_clock_config_t es_clk = {.mclk_inverted = false,
@@ -199,9 +201,49 @@ void InitButtons() {
         BUTTON_SINGLE_CLICK,
         nullptr,
         [](void *button_handle, void *usr_data) {
-          CLOGI("button BOOT single click\n");
+          CLOGI("button BOOT single click");
           g_echo_enable = !g_echo_enable;
+        },
+        nullptr));
+    button_event_args_t event_args = {
+        .long_press =
+            {
+                .press_time = 1000,
+            },
+    };
 
+    ESP_ERROR_CHECK(iot_button_register_cb(
+        g_button_boot_handle,
+        BUTTON_LONG_PRESS_START,
+        &event_args,
+        [](void *button_handle, void *usr_data) {
+          CLOGI("button BOOT long press start");
+          WiFi.begin(kWifiSsid, kWifiPassword);
+        },
+        nullptr));
+  }
+
+  // Button A
+  {
+    button_config_t btn_cfg = {
+        .long_press_time = 1000,
+        .short_press_time = 50,
+    };
+
+    button_gpio_config_t gpio_cfg = {
+        .gpio_num = kKeyA,
+        .active_level = 1,
+        .enable_power_save = false,
+        .disable_pull = false,
+    };
+
+    ESP_ERROR_CHECK(iot_button_new_gpio_device(&btn_cfg, &gpio_cfg, &g_button_a_handle));
+    ESP_ERROR_CHECK(iot_button_register_cb(
+        g_button_a_handle,
+        BUTTON_SINGLE_CLICK,
+        nullptr,
+        [](void *button_handle, void *usr_data) {
+          CLOGI("button A single click");
           SD.end();
           g_sdcard_type = CARD_NONE;
 
@@ -227,41 +269,6 @@ void InitButtons() {
           }
         },
         nullptr));
-    button_event_args_t event_args = {
-        .long_press =
-            {
-                .press_time = 1000,
-            },
-    };
-
-    ESP_ERROR_CHECK(iot_button_register_cb(
-        g_button_boot_handle,
-        BUTTON_LONG_PRESS_START,
-        &event_args,
-        [](void *button_handle, void *usr_data) {
-          CLOGI("button BOOT long press start\n");
-          WiFi.begin(kWifiSsid, kWifiPassword);
-        },
-        nullptr));
-  }
-
-  // Button A
-  {
-    button_config_t btn_cfg = {
-        .long_press_time = 1000,
-        .short_press_time = 50,
-    };
-
-    button_gpio_config_t gpio_cfg = {
-        .gpio_num = kKeyA,
-        .active_level = 0,
-        .enable_power_save = false,
-        .disable_pull = false,
-    };
-
-    ESP_ERROR_CHECK(iot_button_new_gpio_device(&btn_cfg, &gpio_cfg, &g_button_a_handle));
-    ESP_ERROR_CHECK(iot_button_register_cb(
-        g_button_a_handle, BUTTON_SINGLE_CLICK, nullptr, [](void *button_handle, void *usr_data) { CLOGI("button A single click\n"); }, nullptr));
   }
 
   // Button B
@@ -273,14 +280,14 @@ void InitButtons() {
 
     button_gpio_config_t gpio_cfg = {
         .gpio_num = kKeyB,
-        .active_level = 0,
+        .active_level = 1,
         .enable_power_save = false,
         .disable_pull = false,
     };
 
     ESP_ERROR_CHECK(iot_button_new_gpio_device(&btn_cfg, &gpio_cfg, &g_button_b_handle));
     ESP_ERROR_CHECK(iot_button_register_cb(
-        g_button_b_handle, BUTTON_SINGLE_CLICK, nullptr, [](void *button_handle, void *usr_data) { CLOGI("button B single click\n"); }, nullptr));
+        g_button_b_handle, BUTTON_SINGLE_CLICK, nullptr, [](void *button_handle, void *usr_data) { CLOGI("button B single click"); }, nullptr));
   }
 }
 
@@ -557,6 +564,27 @@ void EchoLoop(void *) {
     ESP_ERROR_CHECK(i2s_channel_write(g_es8311_tx_handle, s_buffer, bytes_read, nullptr, UINT32_MAX));
   }
 }
+
+void InitRGBLed() {
+  // LED strip general initialization, according to your led board design
+  led_strip_config_t strip_config = {.strip_gpio_num = GPIO_NUM_41,  // The GPIO that connected to the LED strip's data line
+                                     .max_leds = 1,                  // The number of LEDs in the strip,
+                                     .led_model = LED_MODEL_WS2812,  // LED strip model
+                                     .color_component_format = LED_STRIP_COLOR_COMPONENT_FMT_GRB,  // The color order of the strip: GRB
+                                     .flags = {
+                                         .invert_out = false,  // don't invert the output signal
+                                     }};
+
+  // LED strip backend configuration: RMT
+  led_strip_rmt_config_t rmt_config = {.clk_src = RMT_CLK_SRC_DEFAULT,     // different clock source can lead to different power consumption
+                                       .resolution_hz = 10 * 1000 * 1000,  // RMT counter clock frequency
+                                       .mem_block_symbols = 0,             // the memory block size used by the RMT channel
+                                       .flags = {
+                                           .with_dma = 0,  // Using DMA can improve performance when driving more LEDs
+                                       }};
+  ESP_ERROR_CHECK(led_strip_new_rmt_device(&strip_config, &rmt_config, &g_led_strip));
+  ESP_ERROR_CHECK(led_strip_clear(g_led_strip));
+}
 }  // namespace
 
 void setup() {
@@ -569,6 +597,7 @@ void setup() {
   InitPdmMic();
   InitButtons();
   InitDisplay();
+  InitRGBLed();
   pinMode(kBatteryLevelValue, INPUT);
 
   xTaskCreate(DisplayLoop, "DisplayLoop", 4096 * 4, nullptr, 5, nullptr);
@@ -583,4 +612,19 @@ void setup() {
 
 void loop() {
   g_battery_level = analogRead(kBatteryLevelValue);
+
+  static auto s_update_time = 0;
+  static uint32_t s_color_index = 0;
+  constexpr uint32_t kColors[][3] = {
+      {255, 0, 0},
+      {0, 255, 0},
+      {0, 0, 255},
+  };
+
+  if (s_update_time == 0 || millis() - s_update_time > 500) {
+    s_update_time = millis();
+    const auto &color = kColors[s_color_index++ % (sizeof(kColors) / sizeof(kColors[0]))];
+    ESP_ERROR_CHECK(led_strip_set_pixel(g_led_strip, 0, color[0], color[1], color[2]));
+    ESP_ERROR_CHECK(led_strip_refresh(g_led_strip));
+  }
 }
