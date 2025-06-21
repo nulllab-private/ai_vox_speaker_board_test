@@ -29,8 +29,8 @@
 namespace {
 #include "pcm.h"
 
-constexpr char kVersion[] = "1.0.1";
-constexpr char kWifiSsid[] = "emakefun";      // Change this to your WiFi SSID
+constexpr char kVersion[] = "1.0.2";
+constexpr char kWifiSsid[] = "emekefun";      // Change this to your WiFi SSID
 constexpr char kWifiPassword[] = "501416wf";  // Change this to your WiFi password
 
 constexpr auto kKeyA = GPIO_NUM_46;
@@ -55,14 +55,14 @@ constexpr gpio_num_t kDisplayBlk = GPIO_NUM_16;
 
 constexpr gpio_num_t kBatteryLevelValue = GPIO_NUM_18;
 
-constexpr gpio_num_t kSDCardMosi = GPIO_NUM_40;
-constexpr gpio_num_t kSDCardMiso = GPIO_NUM_38;
-constexpr gpio_num_t kSDCardClk = GPIO_NUM_39;
+constexpr gpio_num_t kSDCardMosi = GPIO_NUM_39;
+constexpr gpio_num_t kSDCardMiso = GPIO_NUM_40;
+constexpr gpio_num_t kSDCardClk = GPIO_NUM_38;
 
 i2c_master_bus_handle_t g_i2c_master_bus = nullptr;
 
 i2s_chan_handle_t g_es8311_tx_handle = 0;
-// i2s_chan_handle_t g_es8311_rx_handle = 0;
+i2s_chan_handle_t g_es8311_rx_handle = 0;
 i2s_chan_handle_t g_pdm_rx_handle = 0;
 
 button_handle_t g_button_a_handle = nullptr;
@@ -83,8 +83,8 @@ void InitEs8311I2s() {
 
   i2s_chan_config_t chan_cfg = I2S_CHANNEL_DEFAULT_CONFIG(I2S_NUM_1, I2S_ROLE_MASTER);
   chan_cfg.auto_clear = true;  // Auto clear the legacy data in the DMA buffer
-  // ESP_ERROR_CHECK(i2s_new_channel(&chan_cfg, &g_es8311_tx_handle, &g_es8311_rx_handle));
-  ESP_ERROR_CHECK(i2s_new_channel(&chan_cfg, &g_es8311_tx_handle, nullptr));
+  ESP_ERROR_CHECK(i2s_new_channel(&chan_cfg, &g_es8311_tx_handle, &g_es8311_rx_handle));
+  // ESP_ERROR_CHECK(i2s_new_channel(&chan_cfg, &g_es8311_tx_handle, nullptr));
   i2s_std_config_t std_cfg = {
       .clk_cfg = I2S_STD_CLK_DEFAULT_CONFIG(EXAMPLE_SAMPLE_RATE),
       .slot_cfg =
@@ -108,8 +108,8 @@ void InitEs8311I2s() {
               .bclk = kEs8311I2sSclk,
               .ws = kEs8311I2sWs,
               .dout = kEs8311I2sDsdin,
-              // .din = kEs8311I2sAsdout,
-              .din = GPIO_NUM_NC,
+              .din = kEs8311I2sAsdout,
+              // .din = GPIO_NUM_NC,
               .invert_flags =
                   {
                       .mclk_inv = false,
@@ -122,9 +122,9 @@ void InitEs8311I2s() {
   std_cfg.clk_cfg.mclk_multiple = static_cast<i2s_mclk_multiple_t>(EXAMPLE_MCLK_MULTIPLE);
 
   ESP_ERROR_CHECK(i2s_channel_init_std_mode(g_es8311_tx_handle, &std_cfg));
-  // ESP_ERROR_CHECK(i2s_channel_init_std_mode(g_es8311_rx_handle, &std_cfg));
+  ESP_ERROR_CHECK(i2s_channel_init_std_mode(g_es8311_rx_handle, &std_cfg));
   ESP_ERROR_CHECK(i2s_channel_enable(g_es8311_tx_handle));
-  // ESP_ERROR_CHECK(i2s_channel_enable(g_es8311_rx_handle));
+  ESP_ERROR_CHECK(i2s_channel_enable(g_es8311_rx_handle));
 }
 
 void InitEs8311() {
@@ -158,26 +158,6 @@ void InitEs8311() {
   ESP_ERROR_CHECK(es8311_voice_volume_set(es_handle, 80, nullptr));
   ESP_ERROR_CHECK(es8311_microphone_config(es_handle, false));
   ESP_ERROR_CHECK(es8311_microphone_gain_set(es_handle, ES8311_MIC_GAIN_18DB));
-}
-
-void InitPdmMic() {
-  i2s_chan_config_t rx_chan_cfg = I2S_CHANNEL_DEFAULT_CONFIG(I2S_NUM_0, I2S_ROLE_MASTER);
-  i2s_new_channel(&rx_chan_cfg, NULL, &g_pdm_rx_handle);
-  i2s_pdm_rx_config_t rx_pdm_cfg = {
-      .clk_cfg = I2S_PDM_RX_CLK_DEFAULT_CONFIG(16000),
-      .slot_cfg = I2S_PDM_RX_SLOT_DEFAULT_CONFIG(I2S_DATA_BIT_WIDTH_16BIT, I2S_SLOT_MODE_MONO),
-      .gpio_cfg =
-          {
-              .clk = GPIO_NUM_47,
-              .din = GPIO_NUM_48,
-              .invert_flags =
-                  {
-                      .clk_inv = false,
-                  },
-          },
-  };
-  ESP_ERROR_CHECK(i2s_channel_init_pdm_rx_mode(g_pdm_rx_handle, &rx_pdm_cfg));
-  ESP_ERROR_CHECK(i2s_channel_enable(g_pdm_rx_handle));
 }
 
 void InitButtons() {
@@ -560,7 +540,7 @@ void EchoLoop(void *) {
       vTaskDelay(10 / portTICK_PERIOD_MS);
       continue;
     }
-    ESP_ERROR_CHECK(i2s_channel_read(g_pdm_rx_handle, s_buffer, kBufferSize, &bytes_read, UINT32_MAX));
+    ESP_ERROR_CHECK(i2s_channel_read(g_es8311_rx_handle, s_buffer, kBufferSize, &bytes_read, UINT32_MAX));
     ESP_ERROR_CHECK(i2s_channel_write(g_es8311_tx_handle, s_buffer, bytes_read, nullptr, UINT32_MAX));
   }
 }
@@ -594,7 +574,6 @@ void setup() {
 
   InitEs8311I2s();
   InitEs8311();
-  InitPdmMic();
   InitButtons();
   InitDisplay();
   InitRGBLed();
